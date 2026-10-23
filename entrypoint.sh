@@ -95,11 +95,24 @@ if [ -n "${INPUT_APT}" ]; then
 fi
 
 # Prepare environment variables to pass to railpack
+SECRET_ARGS=""
 PREPARE_ARGS=()
 if [ -n "${INPUT_ENV}" ]; then
   while IFS= read -r env_var; do
     [ -z "$env_var" ] && continue
+  
+    # Pass the variable to railpack prepare
     PREPARE_ARGS+=("--env" "$env_var")
+  
+    # Make the value available to Docker Buildx
+    key="${env_var%%=*}"
+    if [[ ! "$key" =~ ^[a-zA-Z_][a-zA-Z0-9_]*$ || "$env_var" != *=* ]]; then
+      echo "Invalid environment variable assignment"
+      exit 1
+    fi
+  
+    export "$env_var"
+    SECRET_ARGS+=" --secret id=${key},env=${key}"
   done <<<"$INPUT_ENV"
 fi
 
@@ -110,6 +123,7 @@ railpack prepare "${PREPARE_ARGS[@]}" --plan-out "$RAILPACK_PLAN_FILE" "$INPUT_C
 
 # Build docker buildx command
 COMMON_ARGS="--build-arg BUILDKIT_SYNTAX=ghcr.io/railwayapp/railpack-frontend"
+COMMON_ARGS="$COMMON_ARGS$SECRET_ARGS"
 COMMON_ARGS="$COMMON_ARGS -f $RAILPACK_PLAN_FILE"
 
 # Add labels
